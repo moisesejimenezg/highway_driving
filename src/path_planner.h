@@ -11,5 +11,5 @@ struct ControlTrajectory
 class PathPlanner
 {
 public:
-    ControlTrajectory GetControlTrajectory() const;
+    ControlTrajectory GetControlTrajectory(double x, double y, double yaw) const;
 };

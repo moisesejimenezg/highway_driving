@@ -99,12 +99,8 @@ int main()
                     vector<double> next_x_vals;
                     vector<double> next_y_vals;
 
-                    /**
-                     * TODO: define a path made up of (x,y) points that the car will visit
-                     *   sequentially every .02 seconds
-                     */
                     PathPlanner planner;
-                    const auto trajectory{planner.GetControlTrajectory()};
+                    const auto trajectory{planner.GetControlTrajectory(car_x, car_y)};
 
                     msgJson["next_x"] = trajectory.x;
                     msgJson["next_y"] = trajectory.y;
