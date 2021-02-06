@@ -1,0 +1,8 @@
+---
+BasedOnStyle: Google
+IndentWidth: 4
+AccessModifierOffset: -4
+BreakBeforeBraces: Allman
+AllowShortIfStatementsOnASingleLine: true
+IndentCaseLabels: false
+ColumnLimit: 100
