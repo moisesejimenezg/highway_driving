@@ -4,20 +4,20 @@
 
 namespace
 {
-ControlTrajectory GetStraightLine(double x, double y, double yaw)
+ControlTrajectory GetStraightLine(const CarState& car_state)
 {
     constexpr auto jump{0.45};
     ControlTrajectory result;
     for (auto i{0u}; i < 50; ++i)
     {
-        result.x.emplace_back(x + i * jump * cos(deg2rad(yaw)));
-        result.y.emplace_back(y + i * jump * sin(deg2rad(yaw)));
+        result.x.emplace_back(car_state.x + i * jump * cos(deg2rad(car_state.yaw)));
+        result.y.emplace_back(car_state.y + i * jump * sin(deg2rad(car_state.yaw)));
     }
     return result;
 }
 }  // namespace
 
-ControlTrajectory PathPlanner::GetControlTrajectory(double x, double y, double yaw) const
+ControlTrajectory PathPlanner::GetControlTrajectory(const CarState& car_state) const
 {
-    return GetStraightLine(x, y, yaw);
+    return GetStraightLine(car_state);
 }

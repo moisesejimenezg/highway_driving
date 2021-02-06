@@ -76,12 +76,13 @@ int main()
                     // j[1] is the data JSON object
 
                     // Main car's localization Data
-                    double car_x = j[1]["x"];
-                    double car_y = j[1]["y"];
-                    double car_s = j[1]["s"];
-                    double car_d = j[1]["d"];
-                    double car_yaw = j[1]["yaw"];
-                    double car_speed = j[1]["speed"];
+                    CarState car{};
+                    car.x = j[1]["x"];
+                    car.y = j[1]["y"];
+                    car.s = j[1]["s"];
+                    car.d = j[1]["d"];
+                    car.yaw = j[1]["yaw"];
+                    car.v = j[1]["speed"];
 
                     // Previous path data given to the Planner
                     auto previous_path_x = j[1]["previous_path_x"];
@@ -100,7 +101,7 @@ int main()
                     vector<double> next_y_vals;
 
                     PathPlanner planner;
-                    const auto trajectory{planner.GetControlTrajectory(car_x, car_y)};
+                    const auto trajectory{planner.GetControlTrajectory(car)};
 
                     msgJson["next_x"] = trajectory.x;
                     msgJson["next_y"] = trajectory.y;
