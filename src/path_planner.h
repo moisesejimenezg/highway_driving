@@ -3,6 +3,8 @@
 
 #include <vector>
 
+#include "world.h"
+
 struct CarState
 {
     double x{};
@@ -22,6 +24,10 @@ struct ControlTrajectory
 class PathPlanner
 {
 public:
+    PathPlanner(const World& world) : world_{world} {}
     ControlTrajectory GetControlTrajectory(const CarState& car_state) const;
+
+private:
+    const World& world_;
 };
 #endif  // PATH_PLANNER_H
