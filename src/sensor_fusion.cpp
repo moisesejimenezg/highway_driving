@@ -22,6 +22,7 @@ std::optional<Object> SensorFusion::GetObjectInFront(const CarState& ego) const
     for (const auto& object : objects_)
     {
         const Lane object_lane{object.d};
+        // TODO: Might have to project car one step ahead
         if (object_lane.GetLaneId() == ego_lane.GetLaneId() && object.s > ego.s &&
             object.s - ego.s <= 30)
         {

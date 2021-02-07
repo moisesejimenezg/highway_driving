@@ -54,9 +54,11 @@ int main()
     }
     PathPlanner planner{world};
     SensorFusion sensor_fusion{};
+    // TODO: extract to car state
+    auto target_v{0.};
 
-    h.onMessage([&planner, &sensor_fusion](uWS::WebSocket<uWS::SERVER> ws, char *data,
-                                           size_t length, uWS::OpCode opCode) {
+    h.onMessage([&planner, &sensor_fusion, &target_v](uWS::WebSocket<uWS::SERVER> ws, char *data,
+                                                      size_t length, uWS::OpCode opCode) {
         // "42" at the start of the message means there's a websocket message event.
         // The 4 signifies a websocket message
         // The 2 signifies a websocket event
@@ -100,13 +102,19 @@ int main()
                     json msgJson;
 
                     const Lane lane{car.d};
-                    double target_v{49.5};
+                    // TODO: extract to motion planner
+                    const auto acceleration{0.224};
                     if (object_in_front.has_value())
                     {
-                        target_v = object_in_front.value().GetV() * 2.24 - 5.;
+                        target_v -= acceleration;
+                    }
+                    else if (target_v < 49.5)
+                    {
+                        target_v += acceleration;
                     }
                     const auto trajectory{
                         planner.GetControlTrajectory(old_trajectory, car, lane, target_v)};
+                    // END TODO
 
                     msgJson["next_x"] = trajectory.x;
                     msgJson["next_y"] = trajectory.y;
