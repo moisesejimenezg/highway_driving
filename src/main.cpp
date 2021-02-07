@@ -98,9 +98,8 @@ int main()
 
                     json msgJson;
 
-                    const auto lane_id{GetLaneId(car.d)};
-                    const auto trajectory{
-                        planner.GetControlTrajectory(old_trajectory, car, lane_id)};
+                    const Lane lane{car.d};
+                    const auto trajectory{planner.GetControlTrajectory(old_trajectory, car, lane)};
 
                     msgJson["next_x"] = trajectory.x;
                     msgJson["next_y"] = trajectory.y;

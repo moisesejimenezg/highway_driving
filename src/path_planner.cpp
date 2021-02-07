@@ -105,36 +105,17 @@ ControlTrajectory GenerateTrajectory(const ControlTrajectory& previous_trajector
 }
 }  // namespace
 
-LaneId GetLaneId(double d)
-{
-    if (0. <= d && d < 4.)
-    {
-        return LaneId::kLeft;
-    }
-    if (4. <= d && d < 8.)
-    {
-        return LaneId::kCenter;
-    }
-    if (8. <= d && d < 12.)
-    {
-        return LaneId::kRight;
-    }
-    return LaneId::kInvalid;
-}
-
-double GetCenterD(LaneId lane_id) { return 2. + 4. * static_cast<double>(lane_id); }
-
 ControlTrajectory PathPlanner::GetControlTrajectory(const ControlTrajectory& previous_trajectory,
                                                     const CarState& car_state,
-                                                    const LaneId& lane_id) const
+                                                    const Lane& lane) const
 {
     const auto straight_trajectory{GetStraightLine(car_state)};
-    const auto follow_lane{GetLaneFollowingTrajectory(car_state, previous_trajectory, lane_id)};
+    const auto follow_lane{GetLaneFollowingTrajectory(car_state, previous_trajectory, lane)};
     return follow_lane;
 }
 
 ControlTrajectory PathPlanner::BuildReferencePath(const CarState& car_state, const History& history,
-                                                  const LaneId& lane_id) const
+                                                  const Lane& lane) const
 {
     ControlTrajectory reference_path;
     reference_path.x.insert(reference_path.x.begin(), history.first.x.begin(),
@@ -145,7 +126,7 @@ ControlTrajectory PathPlanner::BuildReferencePath(const CarState& car_state, con
     for (auto i{0u}; i < 3; ++i)
     {
         const auto s{car_state.s + (i + 1) * jump};
-        const auto d{GetCenterD(lane_id)};
+        const auto d{lane.GetCenterD()};
         const auto xy{
             getXY(s, d, world_.map_waypoints_s, world_.map_waypoints_x, world_.map_waypoints_y)};
         reference_path.x.emplace_back(xy[0]);
@@ -155,11 +136,10 @@ ControlTrajectory PathPlanner::BuildReferencePath(const CarState& car_state, con
 }
 
 ControlTrajectory PathPlanner::GetLaneFollowingTrajectory(
-    const CarState& car_state, const ControlTrajectory& previous_trajectory,
-    const LaneId& lane_id) const
+    const CarState& car_state, const ControlTrajectory& previous_trajectory, const Lane& lane) const
 {
     const auto history{GetHistory(previous_trajectory, car_state)};
-    auto reference_path{BuildReferencePath(car_state, history, lane_id)};
+    auto reference_path{BuildReferencePath(car_state, history, lane)};
     const auto previous_x{reference_path.x[1]};
     const auto previous_y{reference_path.y[1]};
     TransformFromOdometry(reference_path, history);
