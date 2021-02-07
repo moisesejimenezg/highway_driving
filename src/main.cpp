@@ -10,6 +10,7 @@
 #include "helpers.h"
 #include "json.hpp"
 #include "path_planner.h"
+#include "sensor_fusion.h"
 #include "world.h"
 
 // for convenience
@@ -52,69 +53,71 @@ int main()
         world.map_waypoints_dy.push_back(d_y);
     }
     PathPlanner planner{world};
+    SensorFusion sensor_fusion{};
 
-    h.onMessage(
-        [&planner](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
-            // "42" at the start of the message means there's a websocket message event.
-            // The 4 signifies a websocket message
-            // The 2 signifies a websocket event
-            if (length && length > 2 && data[0] == '4' && data[1] == '2')
+    h.onMessage([&planner, &sensor_fusion](uWS::WebSocket<uWS::SERVER> ws, char *data,
+                                           size_t length, uWS::OpCode opCode) {
+        // "42" at the start of the message means there's a websocket message event.
+        // The 4 signifies a websocket message
+        // The 2 signifies a websocket event
+        if (length && length > 2 && data[0] == '4' && data[1] == '2')
+        {
+            auto s = hasData(data);
+
+            if (s != "")
             {
-                auto s = hasData(data);
+                auto j = json::parse(s);
 
-                if (s != "")
+                string event = j[0].get<string>();
+
+                if (event == "telemetry")
                 {
-                    auto j = json::parse(s);
+                    // j[1] is the data JSON object
 
-                    string event = j[0].get<string>();
+                    // Main car's localization Data
+                    CarState car{};
+                    car.x = j[1]["x"];
+                    car.y = j[1]["y"];
+                    car.s = j[1]["s"];
+                    car.d = j[1]["d"];
+                    car.yaw = j[1]["yaw"];
+                    car.v = j[1]["speed"];
 
-                    if (event == "telemetry")
-                    {
-                        // j[1] is the data JSON object
+                    // Previous path data given to the Planner
+                    ControlTrajectory old_trajectory{};
+                    old_trajectory.x = j[1]["previous_path_x"].get<std::vector<double>>();
+                    old_trajectory.y = j[1]["previous_path_y"].get<std::vector<double>>();
+                    // Previous path's end s and d values
+                    double end_path_s = j[1]["end_path_s"];
+                    double end_path_d = j[1]["end_path_d"];
 
-                        // Main car's localization Data
-                        CarState car{};
-                        car.x = j[1]["x"];
-                        car.y = j[1]["y"];
-                        car.s = j[1]["s"];
-                        car.d = j[1]["d"];
-                        car.yaw = j[1]["yaw"];
-                        car.v = j[1]["speed"];
+                    // Sensor Fusion Data, a list of all other cars on the same side
+                    //   of the road.
+                    auto sensor_fusion_raw = j[1]["sensor_fusion"];
+                    sensor_fusion.Update(sensor_fusion_raw);
 
-                        // Previous path data given to the Planner
-                        ControlTrajectory old_trajectory{};
-                        old_trajectory.x = j[1]["previous_path_x"].get<std::vector<double>>();
-                        old_trajectory.y = j[1]["previous_path_y"].get<std::vector<double>>();
-                        // Previous path's end s and d values
-                        double end_path_s = j[1]["end_path_s"];
-                        double end_path_d = j[1]["end_path_d"];
+                    json msgJson;
 
-                        // Sensor Fusion Data, a list of all other cars on the same side
-                        //   of the road.
-                        auto sensor_fusion = j[1]["sensor_fusion"];
+                    const auto lane_id{GetLaneId(car.d)};
+                    const auto trajectory{
+                        planner.GetControlTrajectory(old_trajectory, car, lane_id)};
 
-                        json msgJson;
+                    msgJson["next_x"] = trajectory.x;
+                    msgJson["next_y"] = trajectory.y;
 
-                        const auto lane_id{GetLaneId(car.d)};
-                        const auto trajectory{
-                            planner.GetControlTrajectory(old_trajectory, car, lane_id)};
+                    auto msg = "42[\"control\"," + msgJson.dump() + "]";
 
-                        msgJson["next_x"] = trajectory.x;
-                        msgJson["next_y"] = trajectory.y;
-
-                        auto msg = "42[\"control\"," + msgJson.dump() + "]";
-
-                        ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
-                    }  // end "telemetry" if
-                }
-                else
-                {
-                    // Manual driving
-                    std::string msg = "42[\"manual\",{}]";
                     ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
-                }
-            }  // end websocket if
-        });    // end h.onMessage
+                }  // end "telemetry" if
+            }
+            else
+            {
+                // Manual driving
+                std::string msg = "42[\"manual\",{}]";
+                ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
+            }
+        }  // end websocket if
+    });    // end h.onMessage
 
     h.onConnection([&h](uWS::WebSocket<uWS::SERVER> ws, uWS::HttpRequest req) {
         std::cout << "Connected!!!" << std::endl;
