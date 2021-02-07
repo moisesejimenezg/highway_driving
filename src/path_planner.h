@@ -3,18 +3,9 @@
 
 #include <vector>
 
+#include "car_state.h"
 #include "lane.h"
 #include "world.h"
-
-struct CarState
-{
-    double x{};
-    double y{};
-    double s{};
-    double d{};
-    double yaw{};
-    double v{};
-};
 
 struct ControlTrajectory
 {
@@ -28,13 +19,15 @@ public:
     using History = std::pair<ControlTrajectory, double>;
     PathPlanner(const World& world) : world_{world} {}
     ControlTrajectory GetControlTrajectory(const ControlTrajectory& old_trajectory,
-                                           const CarState& car_state, const Lane& lane) const;
+                                           const CarState& car_state, const Lane& lane,
+                                           const double& target_velocity) const;
 
 private:
     const World& world_;
     ControlTrajectory BuildReferencePath(const CarState&, const History&, const Lane&) const;
     ControlTrajectory GetLaneFollowingTrajectory(const CarState& car_state,
                                                  const ControlTrajectory& previous_trajectory,
-                                                 const Lane& lane) const;
+                                                 const Lane& lane,
+                                                 const double& target_velocity) const;
 };
 #endif  // PATH_PLANNER_H

@@ -95,11 +95,18 @@ int main()
                     //   of the road.
                     auto sensor_fusion_raw = j[1]["sensor_fusion"];
                     sensor_fusion.Update(sensor_fusion_raw);
+                    const auto object_in_front{sensor_fusion.GetObjectInFront(car)};
 
                     json msgJson;
 
                     const Lane lane{car.d};
-                    const auto trajectory{planner.GetControlTrajectory(old_trajectory, car, lane)};
+                    double target_v{49.5};
+                    if (object_in_front.has_value())
+                    {
+                        target_v = object_in_front.value().GetV() * 2.24 - 5.;
+                    }
+                    const auto trajectory{
+                        planner.GetControlTrajectory(old_trajectory, car, lane, target_v)};
 
                     msgJson["next_x"] = trajectory.x;
                     msgJson["next_y"] = trajectory.y;
