@@ -68,6 +68,15 @@ void TransformToOdometry(double& x, double& y, const double& yaw)
     y = x * sin(yaw) + y * cos(yaw);
 }
 
+auto CalculateStepSize(const double& target_x, const tk::spline& spline,
+                       const double& target_velocity)
+{
+    const auto target_y{spline(target_x)};
+    const auto target_d{sqrt(target_x * target_x + target_y * target_y)};
+    const auto N{target_d / (.02 * target_velocity / 2.24)};
+    return target_x / N;
+}
+
 ControlTrajectory GenerateTrajectory(const ControlTrajectory& previous_trajectory,
                                      const ControlTrajectory& reference_path,
                                      const double& previous_x, const double& previous_y,
@@ -79,13 +88,9 @@ ControlTrajectory GenerateTrajectory(const ControlTrajectory& previous_trajector
 
     tk::spline spline{};
     spline.set_points(reference_path.x, reference_path.y);
-    const auto target_x{30.};
-    const auto target_y{spline(target_x)};
-    const auto target_d{sqrt(target_x * target_x + target_y * target_y)};
+    const auto increment{CalculateStepSize(50., spline, target_velocity)};
 
     auto x{0.};
-    const auto N{target_d / (.02 * target_velocity / 2.24)};
-    const auto increment{target_x / N};
     for (auto i{0u}; i <= 50 - previous_trajectory.x.size(); ++i)
     {
         auto x_point{x + increment};
@@ -141,10 +146,11 @@ ControlTrajectory PathPlanner::GetLaneFollowingTrajectory(
 {
     const auto history{GetHistory(previous_trajectory, car_state)};
     auto reference_path{BuildReferencePath(car_state, history, lane)};
-    const auto previous_x{reference_path.x[1]};
-    const auto previous_y{reference_path.y[1]};
+    const auto& previous_x{history.first.x[1]};
+    const auto& previous_y{history.first.y[1]};
+    const auto& previous_yaw{history.second};
     TransformFromOdometry(reference_path, history);
     auto trajectory{GenerateTrajectory(previous_trajectory, reference_path, previous_x, previous_y,
-                                       history.second, target_velocity)};
+                                       previous_yaw, target_velocity)};
     return trajectory;
 }
