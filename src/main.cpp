@@ -9,8 +9,7 @@
 #include "Eigen-3.3/Eigen/QR"
 #include "helpers.h"
 #include "json.hpp"
-#include "path_planner.h"
-#include "sensor_fusion.h"
+#include "motion_planner.h"
 #include "world.h"
 
 // for convenience
@@ -52,13 +51,10 @@ int main()
         world.map_waypoints_dx.push_back(d_x);
         world.map_waypoints_dy.push_back(d_y);
     }
-    PathPlanner planner{world};
-    SensorFusion sensor_fusion{};
-    // TODO: extract to car state
-    auto target_v{0.};
+    MotionPlanner motion_planner{world};
 
-    h.onMessage([&planner, &sensor_fusion, &target_v](uWS::WebSocket<uWS::SERVER> ws, char *data,
-                                                      size_t length, uWS::OpCode opCode) {
+    h.onMessage([&motion_planner](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+                                  uWS::OpCode opCode) {
         // "42" at the start of the message means there's a websocket message event.
         // The 4 signifies a websocket message
         // The 2 signifies a websocket event
@@ -90,32 +86,18 @@ int main()
                     old_trajectory.x = j[1]["previous_path_x"].get<std::vector<double>>();
                     old_trajectory.y = j[1]["previous_path_y"].get<std::vector<double>>();
                     // Previous path's end s and d values
+                    // TODO: Use this
                     double end_path_s = j[1]["end_path_s"];
                     double end_path_d = j[1]["end_path_d"];
 
                     // Sensor Fusion Data, a list of all other cars on the same side
                     //   of the road.
                     auto sensor_fusion_raw = j[1]["sensor_fusion"];
-                    sensor_fusion.Update(sensor_fusion_raw);
-                    const auto object_in_front{sensor_fusion.GetObjectInFront(car)};
+
+                    motion_planner.Update(sensor_fusion_raw, old_trajectory, car);
+                    const auto trajectory{motion_planner.GetOptimalTrajectory()};
 
                     json msgJson;
-
-                    const Lane lane{car.d};
-                    // TODO: extract to motion planner
-                    const auto acceleration{0.224};
-                    if (object_in_front.has_value())
-                    {
-                        target_v -= acceleration;
-                    }
-                    else if (target_v < 49.5)
-                    {
-                        target_v += acceleration;
-                    }
-                    const auto trajectory{
-                        planner.GetControlTrajectory(old_trajectory, car, lane, target_v)};
-                    // END TODO
-
                     msgJson["next_x"] = trajectory.x;
                     msgJson["next_y"] = trajectory.y;
 

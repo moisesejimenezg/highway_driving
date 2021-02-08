@@ -14,6 +14,8 @@ set(sources
         src/helpers.cpp
         src/lane.h
         src/lane.cpp
+        src/motion_planner.h
+        src/motion_planner.cpp
         src/path_planner.h
         src/path_planner.cpp
         src/sensor_fusion.h
