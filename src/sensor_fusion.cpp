@@ -39,7 +39,6 @@ void SensorFusion::UpdateObjectInFront()
     for (const auto& object : objects_)
     {
         const Lane object_lane{object.d};
-        // TODO: Might have to project car one step ahead
         if (object_lane.GetLaneId() == ego_lane.GetLaneId() && object.s > ego_state_.s &&
             object.s - ego_state_.s <= safety_buffer_)
         {
@@ -59,7 +58,8 @@ void SensorFusion::UpdateObjectToTheLeft()
     for (const auto& object : objects_)
     {
         const Lane object_lane{object.d};
-        if (static_cast<int>(object_lane.GetLaneId()) < static_cast<int>(ego_lane.GetLaneId()) &&
+        if (static_cast<int>(ego_lane.GetLaneId()) - static_cast<int>(object_lane.GetLaneId()) ==
+                1 &&
             object.s > ego_state_.s && object.s - ego_state_.s <= safety_buffer_)
         {
             object_to_the_left_ = object;
@@ -78,7 +78,8 @@ void SensorFusion::UpdateObjectToTheRight()
     for (const auto& object : objects_)
     {
         const Lane object_lane{object.d};
-        if (static_cast<int>(object_lane.GetLaneId()) > static_cast<int>(ego_lane.GetLaneId()) &&
+        if (static_cast<int>(object_lane.GetLaneId()) - static_cast<int>(ego_lane.GetLaneId()) ==
+                1 &&
             object.s > ego_state_.s && object.s - ego_state_.s <= safety_buffer_)
         {
             object_to_the_right_ = object;
