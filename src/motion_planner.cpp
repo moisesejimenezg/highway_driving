@@ -1,7 +1,5 @@
 #include "motion_planner.h"
 
-constexpr double kMaximumVelocity = 49.5;
-
 void MotionPlanner::Update(const std::vector<std::vector<double>> &sensor_fusion_raw,
                            const ControlTrajectory &old_trajectory, const CarState &car_state)
 {
@@ -18,17 +16,20 @@ ControlTrajectory MotionPlanner::GetOptimalTrajectory() const
                                               target_velocity_);
 }
 
+constexpr double kAcceleration{0.224};
+constexpr double kMetersPerSecondToMilesPerHour{2.237};
+constexpr double kMaximumVelocityInMilesPerHour{49.5};
 void MotionPlanner::UpdateVelocity()
 {
-    const auto acceleration{0.224};
     const auto object_in_front{sensor_fusion_.GetObjectInFront(ego_state_)};
-    if (object_in_front.has_value())
+    if (object_in_front.has_value() &&
+        object_in_front.value().GetV() * kMetersPerSecondToMilesPerHour < target_velocity_)
     {
-        target_velocity_ -= acceleration;
+        target_velocity_ -= kAcceleration;
     }
-    else if (target_velocity_ < kMaximumVelocity)
+    else if (target_velocity_ < kMaximumVelocityInMilesPerHour)
     {
-        target_velocity_ += acceleration;
+        target_velocity_ += kAcceleration;
     }
 }
 
@@ -45,7 +46,7 @@ void MotionPlanner::UpdateTargetLane()
         {
             target_lane_id_ = static_cast<LaneId>(static_cast<int>(ego_lane.GetLaneId()) - 1);
         }
-        else if (ego_lane.GetLaneId() != LaneId::kRight && !object_to_the_right)
+        if (ego_lane.GetLaneId() != LaneId::kRight && !object_to_the_right)
         {
             target_lane_id_ = static_cast<LaneId>(static_cast<int>(ego_lane.GetLaneId()) + 1);
         }
