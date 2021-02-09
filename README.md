@@ -27,8 +27,10 @@ void MotionPlanner::Update(const std::vector<std::vector<double>> &sensor_fusion
 
 The maneuvers to be generated are mainly defined by a target lane and a target velocity. Lanes are represented by the
 Lane struct which allows from rapid conversion between LaneId and lateral displacement (d), and viceversa.
-The LaneId enum describes the three drivable lanes
 
+### The World
+
+The LaneId enum describes the three drivable lanes
 ```C++
 enum class LaneId
 {
@@ -38,6 +40,33 @@ enum class LaneId
     kCenter  =  1,
     kRight   =  2
     // clang-format on
+};
+```
+
+The CarState struct describes the ego vehicle
+
+```C++
+struct CarState
+{
+    double x{};
+    double y{};
+    double s{};
+    double d{};
+    double yaw{};
+    double v{};
+};
+```
+
+The Object struct describes other vehicles in the road
+
+```C++
+struct Object
+{
+    double vx{};
+    double vy{};
+    double s{};
+    double d{};
+    double GetV() const { return sqrt(vx * vx + vy * vy); }
 };
 ```
 
