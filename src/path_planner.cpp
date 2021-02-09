@@ -135,9 +135,10 @@ ControlTrajectory PathPlanner::BuildReferencePath(const CarState& car_state, con
                             history.first.y.end());
     constexpr auto jump{30.};
     const auto d{lane.GetCenterD()};
+    const auto init_s{car_state.s + 20};
     for (auto i{0u}; i < 3; ++i)
     {
-        const auto s{car_state.s + (i + 1) * jump};
+        const auto s{init_s + (i + 1) * jump};
         const auto xy{
             getXY(s, d, world_.map_waypoints_s, world_.map_waypoints_x, world_.map_waypoints_y)};
         reference_path.x.emplace_back(xy[0]);
