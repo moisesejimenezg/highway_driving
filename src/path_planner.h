@@ -25,9 +25,5 @@ public:
 private:
     const World& world_;
     ControlTrajectory BuildReferencePath(const CarState&, const History&, const Lane&) const;
-    ControlTrajectory GetLaneFollowingTrajectory(const CarState& car_state,
-                                                 const ControlTrajectory& previous_trajectory,
-                                                 const Lane& lane,
-                                                 const double& target_velocity) const;
 };
 #endif  // PATH_PLANNER_H

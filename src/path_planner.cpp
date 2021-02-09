@@ -105,13 +105,6 @@ ControlTrajectory GenerateTrajectory(const ControlTrajectory& previous_trajector
 }
 }  // namespace
 
-ControlTrajectory PathPlanner::GetControlTrajectory(const ControlTrajectory& previous_trajectory,
-                                                    const CarState& car_state, const Lane& lane,
-                                                    const double& target_velocity) const
-{
-    return GetLaneFollowingTrajectory(car_state, previous_trajectory, lane, target_velocity);
-}
-
 constexpr auto kWaypointSpacing{30.};
 constexpr auto kInitialWaypointSpacing{20.};
 ControlTrajectory PathPlanner::BuildReferencePath(const CarState& car_state, const History& history,
@@ -135,9 +128,9 @@ ControlTrajectory PathPlanner::BuildReferencePath(const CarState& car_state, con
     return reference_path;
 }
 
-ControlTrajectory PathPlanner::GetLaneFollowingTrajectory(
-    const CarState& car_state, const ControlTrajectory& previous_trajectory, const Lane& lane,
-    const double& target_velocity) const
+ControlTrajectory PathPlanner::GetControlTrajectory(const ControlTrajectory& previous_trajectory,
+                                                    const CarState& car_state, const Lane& lane,
+                                                    const double& target_velocity) const
 {
     const auto& history{GetHistory(previous_trajectory, car_state)};
     const auto& reference_path{BuildReferencePath(car_state, history, lane)};
