@@ -29,10 +29,9 @@ PathPlanner::History GetHistory(const ControlTrajectory& old_trajectory, const C
     return {previous_trajectory, previous_yaw};
 }
 
-std::pair<double, double> TransformFromOdometry(const double& x, const double& y,
-                                                const double& reference_x,
-                                                const double& reference_y,
-                                                const double& reference_yaw)
+std::pair<double, double> TransformToEgo(const double& x, const double& y,
+                                         const double& reference_x, const double& reference_y,
+                                         const double& reference_yaw)
 {
     const auto shitf_x{x - reference_x};
     const auto shitf_y{y - reference_y};
@@ -50,15 +49,15 @@ ControlTrajectory TransformReferencePath(const ControlTrajectory& trajectory,
     ControlTrajectory result{};
     for (auto i{0u}; i < trajectory.x.size(); ++i)
     {
-        const auto& transformed_point{TransformFromOdometry(
-            trajectory.x[i], trajectory.y[i], reference_x, reference_y, reference_yaw)};
+        const auto& transformed_point{TransformToEgo(trajectory.x[i], trajectory.y[i], reference_x,
+                                                     reference_y, reference_yaw)};
         result.x.push_back(transformed_point.first);
         result.y.push_back(transformed_point.second);
     }
     return result;
 }
 
-std::pair<double, double> TransformToOdometry(const double& x, const double& y, const double& yaw)
+std::pair<double, double> TransformToWorld(const double& x, const double& y, const double& yaw)
 {
     return {x * cos(yaw) - y * sin(yaw), x * sin(yaw) + y * cos(yaw)};
 }
@@ -96,7 +95,7 @@ ControlTrajectory GenerateTrajectory(const ControlTrajectory& previous_trajector
         x += increment;
         auto y_point = spline(x);
 
-        auto next_point{TransformToOdometry(x, y_point, previous_yaw)};
+        auto next_point{TransformToWorld(x, y_point, previous_yaw)};
 
         result.x.push_back(next_point.first + previous_x);
         result.y.push_back(next_point.second + previous_y);
