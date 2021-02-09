@@ -1,145 +1,226 @@
-# CarND-Path-Planning-Project
-Self-Driving Car Engineer Nanodegree Program
-   
-### Simulator.
-You can download the Term3 Simulator which contains the Path Planning Project from the [releases tab (https://github.com/udacity/self-driving-car-sim/releases/tag/T3_v1.2).  
+# Highway Driving
+## Motion Planner
+The overarching component in the designed architecture is the MotionPlanner. It is responsible for updating the
+SensorFusion and the PathPlanner components with the incoming information and producing a drivable trajectory.
 
-To run the simulator on Mac/Linux, first make the binary file executable with the following command:
-```shell
-sudo chmod u+x {simulator_file_name}
+The update cycle for the motion planner can be seen in the main.cpp file
+
+```C++
+motion_planner.Update(sensor_fusion_raw, old_trajectory, car);
+const auto trajectory{motion_planner.GetOptimalTrajectory()};
 ```
 
-### Goals
-In this project your goal is to safely navigate around a virtual highway with other traffic that is driving +-10 MPH of the 50 MPH speed limit. You will be provided the car's localization and sensor fusion data, there is also a sparse map list of waypoints around the highway. The car should try to go as close as possible to the 50 MPH speed limit, which means passing slower traffic when possible, note that other cars will try to change lanes too. The car should avoid hitting other cars at all cost as well as driving inside of the marked road lanes at all times, unless going from one lane to another. The car should be able to make one complete loop around the 6946m highway. Since the car is trying to go 50 MPH, it should take a little over 5 minutes to complete 1 loop. Also the car should not experience total acceleration over 10 m/s^2 and jerk that is greater than 10 m/s^3.
+The innards of the MotionPlanner::Update function can be seen below; mainly the relaying of information to SensorFusion
+and the PathPlanner.
 
-#### The map of the highway is in data/highway_map.txt
-Each waypoint in the list contains  [x,y,s,dx,dy] values. x and y are the waypoint's map coordinate position, the s value is the distance along the road to get to that waypoint in meters, the dx and dy values define the unit normal vector pointing outward of the highway loop.
+```C++
+void MotionPlanner::Update(const std::vector<std::vector<double>> &sensor_fusion_raw,
+                           const ControlTrajectory &old_trajectory, const CarState &car_state)
+{
+    ego_state_ = car_state;
+    old_trajectory_ = old_trajectory;
+    sensor_fusion_.Update(sensor_fusion_raw, car_state);
+    UpdateVelocity();
+    UpdateTargetLane();
+}
+```
 
-The highway's waypoints loop around so the frenet s value, distance along the road, goes from 0 to 6945.554.
+The maneuvers to be generated are mainly defined by a target lane and a target velocity. Lanes are represented by the
+Lane struct which allows from rapid conversion between LaneId and lateral displacement (d), and viceversa.
+The LaneId enum describes the three drivable lanes
 
-## Basic Build Instructions
+```C++
+enum class LaneId
+{
+    // clang-format off
+    kInvalid = -1,
+    kLeft    =  0,
+    kCenter  =  1,
+    kRight   =  2
+    // clang-format on
+};
+```
 
-1. Clone this repo.
-2. Make a build directory: `mkdir build && cd build`
-3. Compile: `cmake .. && make`
-4. Run it: `./path_planning`.
+### Velocity Matching
 
-Here is the data provided from the Simulator to the C++ Program
+To determine the target velocity we look down the road in search for other vehicles in the ego lane
 
-#### Main car's localization Data (No Noise)
+```C++
+void MotionPlanner::UpdateVelocity()
+{
+    const auto object_in_front{sensor_fusion_.GetObjectInFront(ego_state_)};
+    if (object_in_front.has_value() &&
+        object_in_front.value().GetV() * kMetersPerSecondToMilesPerHour < target_velocity_)
+    {
+        target_velocity_ -= kAcceleration;
+    }
+    else if (target_velocity_ < kMaximumVelocityInMilesPerHour)
+    {
+        target_velocity_ += kAcceleration;
+    }
+}
+```
+When the road is clear the ego vehicle accelerates up to the target maximum velocity. On the other hand, when there is
+a vehicle ahead the ego vehicle matches its speed.
 
-["x"] The car's x position in map coordinates
+### Following or Changing Lanes
 
-["y"] The car's y position in map coordinates
+To select the target lane for the maneuver we once again check whether the road is obstructed or not.
 
-["s"] The car's s position in frenet coordinates
+```C++
+void MotionPlanner::UpdateTargetLane()
+{
+    const auto object_in_front{sensor_fusion_.GetObjectInFront(ego_state_)};
+    const auto ego_lane{Lane(ego_state_.d)};
+    target_lane_id_ = ego_lane.GetLaneId();
+    if (object_in_front.has_value())
+    {
+        const auto object_to_the_left{sensor_fusion_.GetNeighborToTheLeft()};
+        const auto object_to_the_right{sensor_fusion_.GetNeighborToTheRight()};
+        if (ego_lane.GetLaneId() != LaneId::kLeft && !object_to_the_left)
+        {
+            target_lane_id_ = static_cast<LaneId>(static_cast<int>(ego_lane.GetLaneId()) - 1);
+        }
+        if (ego_lane.GetLaneId() != LaneId::kRight && !object_to_the_right)
+        {
+            target_lane_id_ = static_cast<LaneId>(static_cast<int>(ego_lane.GetLaneId()) + 1);
+        }
+    }
+}
+```
 
-["d"] The car's d position in frenet coordinates
+In case of having a vehicle in front lines 45-52 pick a new target lane by converting to and from the integer
+representation of lane IDs. Interesting the process has an obvious bias towards the right which could be improved upon.
 
-["yaw"] The car's yaw angle in the map
+## Sensor Fusion
+The Sensor Fusion component preprocesses the incoming environment information (i.e. obstacles in the road) and presents
+the output in a conveniently accessible manner to the MotionPlanner. During its main update cycle the SensorFusion
+component clears its previous results and determines whether or not there are vehicles in the ego lane and both
+neighboring lanes.
 
-["speed"] The car's speed in MPH
+```C++
+void SensorFusion::Update(const std::vector<std::vector<double>>& raw_data,
+                          const CarState& ego_state)
+{
+    Reset();
+    ego_state_ = ego_state;
+    UpdateObjects(raw_data);
+    UpdateObjectInFront();
+    UpdateObjectToTheLeft();
+    UpdateObjectToTheRight();
+}
+```
 
-#### Previous path data given to the Planner
+The objects are sorted according to their distance along the Frenet arclength coordinate (`UpdateObjects`). The
+functions `UpdateObjectInFront`, `UpdateObjectToTheLeft` and `UpdateObjectToTheRight` search for the nearest object that
+is within a set safety buffer (`kSafetyBuffer`). SensorFusion stores these values into `std::optional<Object>` variables
+that are then queried on `MotionPlanner::UpdateVelocity` and `MotionPlanner::UpdateTargetLane` for their values. An
+empty optional means no object was found on that specific lane during a particular time cycle.
 
-//Note: Return the previous list but with processed points removed, can be a nice tool to show how far along
-the path has processed since last time. 
+For example, `UpdateObjectToTheLeft` searches for an object with valid arclength whose _lane id distance_ to the left
+(lines 62-63) is exactly one; meaning the object is in the immediately adjacent lane.
 
-["previous_path_x"] The previous list of x points previously given to the simulator
+```C++
+void SensorFusion::UpdateObjectToTheLeft()
+{
+    const Lane ego_lane{ego_state_.d};
+    if (ego_lane.GetLaneId() == LaneId::kLeft)
+    {
+        return;
+    }
+    for (const auto& object : objects_)
+    {
+        const Lane object_lane{object.d};
+        if (static_cast<int>(ego_lane.GetLaneId()) - static_cast<int>(object_lane.GetLaneId()) ==
+                1 &&
+            object.s > ego_state_.s && object.s - ego_state_.s <= kSafetyBuffer)
+        {
+            object_to_the_left_ = object;
+            break;
+        }
+    }
+}
+```
 
-["previous_path_y"] The previous list of y points previously given to the simulator
+As a particular precaution, before checking for vehicles in neighboring lanes these functions check whether there would
+_even_ exist a neighbor lane.
 
-#### Previous path's end s and d values 
+## PathPlanner
 
-["end_path_s"] The previous list's last point's frenet s value
+The PathPlanner constructs a drivable trajectory based on the previously driven trajectory, the current ego vehicle
+state, the target lane and the target velocity.
 
-["end_path_d"] The previous list's last point's frenet d value
+```C++
+ControlTrajectory PathPlanner::GetControlTrajectory(const ControlTrajectory& previous_trajectory,
+                                                    const CarState& car_state, const Lane& lane,
+                                                    const double& target_velocity) const
+{
+    const auto& history{GetHistory(previous_trajectory, car_state)};
+    const auto& reference_path{BuildReferencePath(car_state, history, lane)};
+    const auto& transformed_reference_path{TransformReferencePath(reference_path, history)};
+    return GenerateTrajectory(previous_trajectory, transformed_reference_path, history,
+                              target_velocity);
+}
+```
 
-#### Sensor Fusion Data, a list of all other car's attributes on the same side of the road. (No Noise)
+The `GetHistory` function picks the last two points of the previouly driven trajector, if posible, or generates a past point
+based on the ego vehicle's current orientation. These is a measure to ensure smoothness within consecutively generated
+trajectories.
 
-["sensor_fusion"] A 2d vector of cars and then that car's [car's unique ID, car's x position in map coordinates, car's y position in map coordinates, car's x velocity in m/s, car's y velocity in m/s, car's s position in frenet coordinates, car's d position in frenet coordinates. 
+From these two points a reference path towards the target lane is drafted. The initially attempt at doing so by simply
+adding some spacing (`kWaypointSpacing`) to the starting point consecutively generated trajectories that performed
+_sharp-ish_ lane changes. To avoid this the distance between the first and second points is artificially smoothed
+(line 118).
 
-## Details
+These points are then transformed to the ego coordinate frame using the `TransformToEgo` function on each point. The
+final trajectory is then generated using the `GenerateTrajectory` function
 
-1. The car uses a perfect controller and will visit every (x,y) point it recieves in the list every .02 seconds. The units for the (x,y) points are in meters and the spacing of the points determines the speed of the car. The vector going from a point to the next point in the list dictates the angle of the car. Acceleration both in the tangential and normal directions is measured along with the jerk, the rate of change of total Acceleration. The (x,y) point paths that the planner recieves should not have a total acceleration that goes over 10 m/s^2, also the jerk should not go over 50 m/s^3. (NOTE: As this is BETA, these requirements might change. Also currently jerk is over a .02 second interval, it would probably be better to average total acceleration over 1 second and measure jerk from that.
+```C++
+ControlTrajectory GenerateTrajectory(const ControlTrajectory& previous_trajectory,
+                                     const ControlTrajectory& reference_path,
+                                     const PathPlanner::History& history,
+                                     const double& target_velocity)
+{
+    const auto& previous_x{history.first.x[1]};
+    const auto& previous_y{history.first.y[1]};
+    const auto& previous_yaw{history.second};
+    ControlTrajectory result{};
+    result.x.insert(result.x.begin(), previous_trajectory.x.begin(), previous_trajectory.x.end());
+    result.y.insert(result.y.begin(), previous_trajectory.y.begin(), previous_trajectory.y.end());
 
-2. There will be some latency between the simulator running and the path planner returning a path, with optimized code usually its not very long maybe just 1-3 time steps. During this delay the simulator will continue using points that it was last given, because of this its a good idea to store the last points you have used so you can have a smooth transition. previous_path_x, and previous_path_y can be helpful for this transition since they show the last points given to the simulator controller with the processed points already removed. You would either return a path that extends this previous path or make sure to create a new path that has a smooth transition with this last path.
+    tk::spline spline{};
+    spline.set_points(reference_path.x, reference_path.y);
+    const auto increment{CalculateStepSize(50., spline, target_velocity)};
 
-## Tips
+    auto x{0.};
+    for (auto i{0u}; i <= 50 - previous_trajectory.x.size(); ++i)
+    {
+        x += increment;
+        auto y_point = spline(x);
 
-A really helpful resource for doing this project and creating smooth trajectories was using http://kluge.in-chemnitz.de/opensource/spline/, the spline function is in a single hearder file is really easy to use.
+        auto next_point{TransformToWorld(x, y_point, previous_yaw)};
 
----
+        result.x.push_back(next_point.first + previous_x);
+        result.y.push_back(next_point.second + previous_y);
+    }
+    return result;
+}
+```
 
-## Dependencies
+Lines 85-86 insert the old trajectory in the beginning of our output vector, thus ensuring continuity. Using the
+previously created reference path a spline is parametrized (lines 88-89) and the missing points to the trajectory
+are calculated (lines 93-102). The step size used to generate the trajectory is dynamically computed each step based on
+the target velocity
 
-* cmake >= 3.5
-  * All OSes: [click here for installation instructions](https://cmake.org/install/)
-* make >= 4.1
-  * Linux: make is installed by default on most Linux distros
-  * Mac: [install Xcode command line tools to get make](https://developer.apple.com/xcode/features/)
-  * Windows: [Click here for installation instructions](http://gnuwin32.sourceforge.net/packages/make.htm)
-* gcc/g++ >= 5.4
-  * Linux: gcc / g++ is installed by default on most Linux distros
-  * Mac: same deal as make - [install Xcode command line tools]((https://developer.apple.com/xcode/features/)
-  * Windows: recommend using [MinGW](http://www.mingw.org/)
-* [uWebSockets](https://github.com/uWebSockets/uWebSockets)
-  * Run either `install-mac.sh` or `install-ubuntu.sh`.
-  * If you install from source, checkout to commit `e94b6e1`, i.e.
-    ```
-    git clone https://github.com/uWebSockets/uWebSockets 
-    cd uWebSockets
-    git checkout e94b6e1
-    ```
-
-## Editor Settings
-
-We've purposefully kept editor configuration files out of this repo in order to
-keep it as simple and environment agnostic as possible. However, we recommend
-using the following settings:
-
-* indent using spaces
-* set tab width to 2 spaces (keeps the matrices in source code aligned)
-
-## Code Style
-
-Please (do your best to) stick to [Google's C++ style guide](https://google.github.io/styleguide/cppguide.html).
-
-## Project Instructions and Rubric
-
-Note: regardless of the changes you make, your project must be buildable using
-cmake and make!
-
-
-## Call for IDE Profiles Pull Requests
-
-Help your fellow students!
-
-We decided to create Makefiles with cmake to keep this project as platform
-agnostic as possible. Similarly, we omitted IDE profiles in order to ensure
-that students don't feel pressured to use one IDE or another.
-
-However! I'd love to help people get up and running with their IDEs of choice.
-If you've created a profile for an IDE that you think other students would
-appreciate, we'd love to have you add the requisite profile files and
-instructions to ide_profiles/. For example if you wanted to add a VS Code
-profile, you'd add:
-
-* /ide_profiles/vscode/.vscode
-* /ide_profiles/vscode/README.md
-
-The README should explain what the profile does, how to take advantage of it,
-and how to install it.
-
-Frankly, I've never been involved in a project with multiple IDE profiles
-before. I believe the best way to handle this would be to keep them out of the
-repo root to avoid clutter. My expectation is that most profiles will include
-instructions to copy files to a new location to get picked up by the IDE, but
-that's just a guess.
-
-One last note here: regardless of the IDE used, every submitted project must
-still be compilable with cmake and make./
-
-## How to write a README
-A well written README file can enhance your project and portfolio.  Develop your abilities to create professional README files by completing [this free course](https://www.udacity.com/course/writing-readmes--ud777).
-
+```C++
+constexpr auto kMilesPerHourToMeter{2.24};
+constexpr auto kSamplingRate{.02};
+auto CalculateStepSize(const double& target_x, const tk::spline& spline,
+                       const double& target_velocity)
+{
+    const auto target_y{spline(target_x)};
+    const auto target_d{sqrt(target_x * target_x + target_y * target_y)};
+    const auto N{target_d / (kSamplingRate * target_velocity / kMilesPerHourToMeter)};
+    return target_x / N;
+}
+```
