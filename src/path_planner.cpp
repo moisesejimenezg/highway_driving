@@ -5,18 +5,6 @@
 
 namespace
 {
-ControlTrajectory GetStraightLine(const CarState& car_state)
-{
-    constexpr auto jump{0.45};
-    ControlTrajectory result;
-    for (auto i{0u}; i < 50; ++i)
-    {
-        result.x.emplace_back(car_state.x + i * jump * cos(deg2rad(car_state.yaw)));
-        result.y.emplace_back(car_state.y + i * jump * sin(deg2rad(car_state.yaw)));
-    }
-    return result;
-}
-
 PathPlanner::History GetHistory(const ControlTrajectory& old_trajectory, const CarState& car_state)
 {
     ControlTrajectory previous_trajectory{};
@@ -121,10 +109,7 @@ ControlTrajectory PathPlanner::GetControlTrajectory(const ControlTrajectory& pre
                                                     const CarState& car_state, const Lane& lane,
                                                     const double& target_velocity) const
 {
-    const auto straight_trajectory{GetStraightLine(car_state)};
-    const auto follow_lane{
-        GetLaneFollowingTrajectory(car_state, previous_trajectory, lane, target_velocity)};
-    return follow_lane;
+    return GetLaneFollowingTrajectory(car_state, previous_trajectory, lane, target_velocity);
 }
 
 constexpr auto kWaypointSpacing{30.};
