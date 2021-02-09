@@ -22,10 +22,10 @@ PathPlanner::History GetHistory(const ControlTrajectory& old_trajectory, const C
     ControlTrajectory previous_trajectory{};
     const auto& size{old_trajectory.x.size()};
     auto previous_yaw{deg2rad(car_state.yaw)};
-    auto previous_x{0.};
-    auto x{0.};
-    auto previous_y{0.};
-    auto y{0.};
+    auto previous_x = car_state.x - cos(car_state.yaw);
+    auto previous_y = car_state.y - sin(car_state.yaw);
+    auto x = car_state.x;
+    auto y = car_state.y;
     if (size >= 2u)
     {
         previous_x = old_trajectory.x[size - 2];
@@ -34,38 +34,45 @@ PathPlanner::History GetHistory(const ControlTrajectory& old_trajectory, const C
         y = old_trajectory.y[size - 1];
         previous_yaw = atan2(y - previous_y, x - previous_x);
     }
-    else
-    {
-        previous_x = car_state.x - cos(car_state.yaw);
-        previous_y = car_state.y - sin(car_state.yaw);
-        x = car_state.x;
-        y = car_state.y;
-    }
     previous_trajectory.x.push_back(previous_x);
-    previous_trajectory.x.push_back(x);
     previous_trajectory.y.push_back(previous_y);
+    previous_trajectory.x.push_back(x);
     previous_trajectory.y.push_back(y);
     return {previous_trajectory, previous_yaw};
 }
 
-void TransformFromOdometry(ControlTrajectory& trajectory, PathPlanner::History history)
+std::pair<double, double> TransformFromOdometry(const double& x, const double& y,
+                                                const double& reference_x,
+                                                const double& reference_y,
+                                                const double& reference_yaw)
 {
-    const auto& reference_x{history.first.x.back()};
-    const auto& reference_y{history.first.y.back()};
-    const auto& reference_yaw{history.second};
-    for (auto i{0u}; i < trajectory.x.size(); ++i)
-    {
-        const auto shitf_x{trajectory.x[i] - reference_x};
-        const auto shitf_y{trajectory.y[i] - reference_y};
-        trajectory.x[i] = shitf_x * cos(0 - reference_yaw) - shitf_y * sin(0 - reference_yaw);
-        trajectory.y[i] = shitf_x * sin(0 - reference_yaw) + shitf_y * cos(0 - reference_yaw);
-    }
+    const auto shitf_x{x - reference_x};
+    const auto shitf_y{y - reference_y};
+    const auto& transformed_x{shitf_x * cos(0 - reference_yaw) - shitf_y * sin(0 - reference_yaw)};
+    const auto& transformed_y{shitf_x * sin(0 - reference_yaw) + shitf_y * cos(0 - reference_yaw)};
+    return {transformed_x, transformed_y};
 }
 
-void TransformToOdometry(double& x, double& y, const double& yaw)
+ControlTrajectory TransformReferencePath(const ControlTrajectory& trajectory,
+                                         PathPlanner::History history)
 {
-    x = x * cos(yaw) - y * sin(yaw);
-    y = x * sin(yaw) + y * cos(yaw);
+    const auto& reference_x{history.first.x[1]};
+    const auto& reference_y{history.first.y[1]};
+    const auto& reference_yaw{history.second};
+    ControlTrajectory result{};
+    for (auto i{0u}; i < trajectory.x.size(); ++i)
+    {
+        const auto& transformed_point{TransformFromOdometry(
+            trajectory.x[i], trajectory.y[i], reference_x, reference_y, reference_yaw)};
+        result.x.push_back(transformed_point.first);
+        result.y.push_back(transformed_point.second);
+    }
+    return result;
+}
+
+std::pair<double, double> TransformToOdometry(const double& x, const double& y, const double& yaw)
+{
+    return {x * cos(yaw) - y * sin(yaw), x * sin(yaw) + y * cos(yaw)};
 }
 
 auto CalculateStepSize(const double& target_x, const tk::spline& spline,
@@ -79,9 +86,12 @@ auto CalculateStepSize(const double& target_x, const tk::spline& spline,
 
 ControlTrajectory GenerateTrajectory(const ControlTrajectory& previous_trajectory,
                                      const ControlTrajectory& reference_path,
-                                     const double& previous_x, const double& previous_y,
-                                     const double& previous_yaw, const double& target_velocity)
+                                     const PathPlanner::History& history,
+                                     const double& target_velocity)
 {
+    const auto& previous_x{history.first.x[1]};
+    const auto& previous_y{history.first.y[1]};
+    const auto& previous_yaw{history.second};
     ControlTrajectory result{};
     result.x.insert(result.x.begin(), previous_trajectory.x.begin(), previous_trajectory.x.end());
     result.y.insert(result.y.begin(), previous_trajectory.y.begin(), previous_trajectory.y.end());
@@ -93,17 +103,13 @@ ControlTrajectory GenerateTrajectory(const ControlTrajectory& previous_trajector
     auto x{0.};
     for (auto i{0u}; i <= 50 - previous_trajectory.x.size(); ++i)
     {
-        auto x_point{x + increment};
+        x += increment;
         auto y_point = spline(x);
-        x = x_point;
 
-        auto reference_x{x_point};
-        auto reference_y{y_point};
-        TransformToOdometry(reference_x, reference_y, previous_yaw);
-        reference_x += previous_x;
-        reference_y += previous_y;
-        result.x.push_back(reference_x);
-        result.y.push_back(reference_y);
+        auto next_point{TransformToOdometry(x, y_point, previous_yaw)};
+
+        result.x.push_back(next_point.first + previous_x);
+        result.y.push_back(next_point.second + previous_y);
     }
     return result;
 }
@@ -122,16 +128,16 @@ ControlTrajectory PathPlanner::GetControlTrajectory(const ControlTrajectory& pre
 ControlTrajectory PathPlanner::BuildReferencePath(const CarState& car_state, const History& history,
                                                   const Lane& lane) const
 {
-    ControlTrajectory reference_path;
+    ControlTrajectory reference_path{};
     reference_path.x.insert(reference_path.x.begin(), history.first.x.begin(),
                             history.first.x.end());
     reference_path.y.insert(reference_path.y.begin(), history.first.y.begin(),
                             history.first.y.end());
     constexpr auto jump{30.};
+    const auto d{lane.GetCenterD()};
     for (auto i{0u}; i < 3; ++i)
     {
         const auto s{car_state.s + (i + 1) * jump};
-        const auto d{lane.GetCenterD()};
         const auto xy{
             getXY(s, d, world_.map_waypoints_s, world_.map_waypoints_x, world_.map_waypoints_y)};
         reference_path.x.emplace_back(xy[0]);
@@ -144,13 +150,9 @@ ControlTrajectory PathPlanner::GetLaneFollowingTrajectory(
     const CarState& car_state, const ControlTrajectory& previous_trajectory, const Lane& lane,
     const double& target_velocity) const
 {
-    const auto history{GetHistory(previous_trajectory, car_state)};
-    auto reference_path{BuildReferencePath(car_state, history, lane)};
-    const auto& previous_x{history.first.x[1]};
-    const auto& previous_y{history.first.y[1]};
-    const auto& previous_yaw{history.second};
-    TransformFromOdometry(reference_path, history);
-    auto trajectory{GenerateTrajectory(previous_trajectory, reference_path, previous_x, previous_y,
-                                       previous_yaw, target_velocity)};
-    return trajectory;
+    const auto& history{GetHistory(previous_trajectory, car_state)};
+    const auto& reference_path{BuildReferencePath(car_state, history, lane)};
+    const auto& transformed_reference_path{TransformReferencePath(reference_path, history)};
+    return GenerateTrajectory(previous_trajectory, transformed_reference_path, history,
+                              target_velocity);
 }

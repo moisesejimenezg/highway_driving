@@ -19,5 +19,6 @@ private:
     SensorFusion sensor_fusion_{};
     double target_velocity_{0.};
     CarState ego_state_{};
+    LaneId target_lane_id_{};
     void UpdateVelocity();
 };

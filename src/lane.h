@@ -14,6 +14,7 @@ class Lane
 {
 public:
     Lane(const double& d);
+    Lane(const LaneId& lane_id) : lane_id_{lane_id} {}
     LaneId GetLaneId() const { return lane_id_; }
     double GetCenterD() const;
 
