@@ -36,12 +36,12 @@ void MotionPlanner::UpdateVelocity()
 void MotionPlanner::UpdateTargetLane()
 {
     const auto object_in_front{sensor_fusion_.GetObjectInFront(ego_state_)};
-    const auto object_to_the_left{sensor_fusion_.GetNeighborToTheLeft()};
-    const auto object_to_the_right{sensor_fusion_.GetNeighborToTheRight()};
     const auto ego_lane{Lane(ego_state_.d)};
     target_lane_id_ = ego_lane.GetLaneId();
     if (object_in_front.has_value())
     {
+        const auto object_to_the_left{sensor_fusion_.GetNeighborToTheLeft()};
+        const auto object_to_the_right{sensor_fusion_.GetNeighborToTheRight()};
         if (ego_lane.GetLaneId() != LaneId::kLeft && !object_to_the_left)
         {
             target_lane_id_ = static_cast<LaneId>(static_cast<int>(ego_lane.GetLaneId()) - 1);
