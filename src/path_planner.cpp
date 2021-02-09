@@ -75,12 +75,14 @@ std::pair<double, double> TransformToOdometry(const double& x, const double& y, 
     return {x * cos(yaw) - y * sin(yaw), x * sin(yaw) + y * cos(yaw)};
 }
 
+constexpr auto kMilesPerHourToMeter{2.24};
+constexpr auto kSamplingRate{.02};
 auto CalculateStepSize(const double& target_x, const tk::spline& spline,
                        const double& target_velocity)
 {
     const auto target_y{spline(target_x)};
     const auto target_d{sqrt(target_x * target_x + target_y * target_y)};
-    const auto N{target_d / (.02 * target_velocity / 2.24)};
+    const auto N{target_d / (kSamplingRate * target_velocity / kMilesPerHourToMeter)};
     return target_x / N;
 }
 
@@ -125,6 +127,8 @@ ControlTrajectory PathPlanner::GetControlTrajectory(const ControlTrajectory& pre
     return follow_lane;
 }
 
+constexpr auto kWaypointSpacing{30.};
+constexpr auto kInitialWaypointSpacing{20.};
 ControlTrajectory PathPlanner::BuildReferencePath(const CarState& car_state, const History& history,
                                                   const Lane& lane) const
 {
@@ -133,12 +137,11 @@ ControlTrajectory PathPlanner::BuildReferencePath(const CarState& car_state, con
                             history.first.x.end());
     reference_path.y.insert(reference_path.y.begin(), history.first.y.begin(),
                             history.first.y.end());
-    constexpr auto jump{30.};
     const auto d{lane.GetCenterD()};
-    const auto init_s{car_state.s + 20};
+    const auto init_s{car_state.s + kInitialWaypointSpacing};
     for (auto i{0u}; i < 3; ++i)
     {
-        const auto s{init_s + (i + 1) * jump};
+        const auto s{init_s + (i + 1) * kWaypointSpacing};
         const auto xy{
             getXY(s, d, world_.map_waypoints_s, world_.map_waypoints_x, world_.map_waypoints_y)};
         reference_path.x.emplace_back(xy[0]);

@@ -16,9 +16,9 @@ ControlTrajectory MotionPlanner::GetOptimalTrajectory() const
                                               target_velocity_);
 }
 
-constexpr double kAcceleration{0.224};
-constexpr double kMetersPerSecondToMilesPerHour{2.237};
-constexpr double kMaximumVelocityInMilesPerHour{49.5};
+constexpr auto kAcceleration{0.224};
+constexpr auto kMetersPerSecondToMilesPerHour{2.237};
+constexpr auto kMaximumVelocityInMilesPerHour{49.5};
 void MotionPlanner::UpdateVelocity()
 {
     const auto object_in_front{sensor_fusion_.GetObjectInFront(ego_state_)};

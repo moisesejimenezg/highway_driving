@@ -23,7 +23,6 @@ public:
     std::optional<Object> GetNeighborToTheRight() const { return object_to_the_right_; }
 
 private:
-    static constexpr double safety_buffer_{30.};
     std::vector<Object> objects_{};
     std::optional<Object> object_in_front_{};
     std::optional<Object> object_to_the_left_{};

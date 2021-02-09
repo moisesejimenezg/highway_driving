@@ -33,6 +33,7 @@ void SensorFusion::UpdateObjects(const std::vector<std::vector<double>>& raw_dat
               [](const auto& lhs, const auto& rhs) { return lhs.s < rhs.s; });
 }
 
+constexpr auto kSafetyBuffer{30.};
 void SensorFusion::UpdateObjectInFront()
 {
     const Lane ego_lane{ego_state_.d};
@@ -40,7 +41,7 @@ void SensorFusion::UpdateObjectInFront()
     {
         const Lane object_lane{object.d};
         if (object_lane.GetLaneId() == ego_lane.GetLaneId() && object.s > ego_state_.s &&
-            object.s - ego_state_.s <= safety_buffer_)
+            object.s - ego_state_.s <= kSafetyBuffer)
         {
             object_in_front_ = object;
             break;
@@ -60,7 +61,7 @@ void SensorFusion::UpdateObjectToTheLeft()
         const Lane object_lane{object.d};
         if (static_cast<int>(ego_lane.GetLaneId()) - static_cast<int>(object_lane.GetLaneId()) ==
                 1 &&
-            object.s > ego_state_.s && object.s - ego_state_.s <= safety_buffer_)
+            object.s > ego_state_.s && object.s - ego_state_.s <= kSafetyBuffer)
         {
             object_to_the_left_ = object;
             break;
@@ -80,7 +81,7 @@ void SensorFusion::UpdateObjectToTheRight()
         const Lane object_lane{object.d};
         if (static_cast<int>(object_lane.GetLaneId()) - static_cast<int>(ego_lane.GetLaneId()) ==
                 1 &&
-            object.s > ego_state_.s && object.s - ego_state_.s <= safety_buffer_)
+            object.s > ego_state_.s && object.s - ego_state_.s <= kSafetyBuffer)
         {
             object_to_the_right_ = object;
             break;
